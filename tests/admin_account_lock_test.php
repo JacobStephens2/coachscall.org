@@ -14,7 +14,10 @@ require dirname(__DIR__) . '/admin/index.php';
 
 $mode = $argv[1] ?? 'suite';
 
-if ($mode === 'pending-add') {
+if ($mode === 'pending-add' || $mode === 'pending-add-signal') {
+    if ($mode === 'pending-add-signal') {
+        file_put_contents($argv[5], 'ready');
+    }
     $ok = pending_add($argv[2], $argv[3], [
         'email' => $argv[4],
         'expires' => time() + 3600,
@@ -22,27 +25,13 @@ if ($mode === 'pending-add') {
     exit($ok ? 0 : 1);
 }
 
-if ($mode === 'pending-add-signal') {
-    file_put_contents($argv[5], 'ready');
-    $ok = pending_add($argv[2], $argv[3], [
-        'email' => $argv[4],
-        'expires' => time() + 3600,
-    ]);
-    exit($ok ? 0 : 1);
-}
-
-if ($mode === 'add-editor') {
-    $ok = update_accounts($argv[2], $argv[3], function (array $users) use ($argv): array {
-        $users[$argv[4]] = ['hash' => $argv[5], 'created' => 1];
-        return $users;
-    });
-    exit($ok ? 0 : 1);
-}
-
-if ($mode === 'add-editor-signal') {
-    file_put_contents($argv[6], 'ready');
-    $ok = update_accounts($argv[2], $argv[3], function (array $users) use ($argv): array {
-        $users[$argv[4]] = ['hash' => $argv[5], 'created' => 2];
+if ($mode === 'add-editor' || $mode === 'add-editor-signal') {
+    if ($mode === 'add-editor-signal') {
+        file_put_contents($argv[6], 'ready');
+    }
+    $created = $mode === 'add-editor-signal' ? 2 : 1;
+    $ok = update_accounts($argv[2], $argv[3], function (array $users) use ($argv, $created): array {
+        $users[$argv[4]] = ['hash' => $argv[5], 'created' => $created];
         return $users;
     });
     exit($ok ? 0 : 1);
@@ -131,9 +120,29 @@ function finish_php(array $child): void
     }
 }
 
+/**
+ * The child must already be waiting on $path's lock. Fail if it finishes
+ * while that lock is still held, then run $whileLocked before the caller
+ * releases the lock.
+ *
+ * @param array{proc: resource, err: string} $child
+ */
+function assert_blocked(array $child, string $ready, string $notStarted, string $finishedWhileLocked, callable $whileLocked): void
+{
+    $deadline = microtime(true) + 5;
+    while (!is_file($ready) && microtime(true) < $deadline) {
+        usleep(1000);
+    }
+    check(is_file($ready), $notStarted);
+    usleep(300000);
+    $status = proc_get_status($child['proc']);
+    check($status['running'], $finishedWhileLocked);
+    $whileLocked();
+}
+
 function hold_lock(string $path)
 {
-    $fh = fopen(editor_file_lock_path($path), 'c');
+    $fh = fopen(sibling_lock_path($path), 'c');
     check(is_resource($fh) && flock($fh, LOCK_EX), 'take exclusive lock');
     return $fh;
 }
@@ -157,19 +166,19 @@ function token_add_waits_for_the_lock(string $testFile): void
     $child = start_php([
         PHP_BINARY, $testFile, 'pending-add-signal', $tokenFile, 'token-b', 'b@example.com', $ready,
     ]);
-    $deadline = microtime(true) + 5;
-    while (!is_file($ready) && microtime(true) < $deadline) {
-        usleep(1000);
-    }
-    check(is_file($ready), 'token child did not start');
-    usleep(300000);
-    $status = proc_get_status($child['proc']);
-    check($status['running'], 'pending_add finished while the token file lock was held');
-    $kept = hash('sha256', 'token-c');
-    $json = json_encode([
-        $kept => ['email' => 'c@example.com', 'expires' => time() + 3600],
-    ]);
-    check($json !== false && atomic_write($tokenFile, $json), 'write token while lock held');
+    assert_blocked(
+        $child,
+        $ready,
+        'token child did not start',
+        'pending_add finished while the token file lock was held',
+        function () use ($tokenFile): void {
+            $kept = hash('sha256', 'token-c');
+            $json = json_encode([
+                $kept => ['email' => 'c@example.com', 'expires' => time() + 3600],
+            ]);
+            check($json !== false && atomic_write($tokenFile, $json), 'write token while lock held');
+        }
+    );
     release_lock($lock);
     finish_php($child);
     check(pending_lookup($tokenFile, 'token-b') !== null, 'token added after the lock was released is missing');
@@ -234,18 +243,18 @@ function account_add_waits_for_the_lock(string $testFile): void
     $child = start_php([
         PHP_BINARY, $testFile, 'add-editor-signal', $users, $old, 'bob@example.com', 'bob-hash', $ready,
     ]);
-    $deadline = microtime(true) + 5;
-    while (!is_file($ready) && microtime(true) < $deadline) {
-        usleep(1000);
-    }
-    check(is_file($ready), 'account child did not start');
-    usleep(300000);
-    $status = proc_get_status($child['proc']);
-    check($status['running'], 'account update finished while the account file lock was held');
-    check(save_users($users, [
-        'alice@example.com' => ['hash' => 'alice-hash', 'created' => 1],
-        'carol@example.com' => ['hash' => 'carol-hash', 'created' => 3],
-    ]), 'write carol while lock held');
+    assert_blocked(
+        $child,
+        $ready,
+        'account child did not start',
+        'account update finished while the account file lock was held',
+        function () use ($users): void {
+            check(save_users($users, [
+                'alice@example.com' => ['hash' => 'alice-hash', 'created' => 1],
+                'carol@example.com' => ['hash' => 'carol-hash', 'created' => 3],
+            ]), 'write carol while lock held');
+        }
+    );
     release_lock($lock);
     finish_php($child);
     $loaded = load_users($users, $old);

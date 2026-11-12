@@ -57,7 +57,7 @@ function atomic_write(string $path, string $contents): bool
 }
 
 /** Sibling lock whose inode stays put when $path is replaced by rename. */
-function editor_file_lock_path(string $path): string
+function sibling_lock_path(string $path): string
 {
     return $path . '.lock';
 }
@@ -71,7 +71,7 @@ function editor_file_lock_path(string $path): string
  */
 function with_exclusive_lock(string $path, callable $fn): mixed
 {
-    $lockPath = editor_file_lock_path($path);
+    $lockPath = sibling_lock_path($path);
     $fh = @fopen($lockPath, 'c');
     if ($fh === false) return false;
     @chmod($lockPath, 0640);
