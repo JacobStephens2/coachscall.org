@@ -13,34 +13,36 @@
 
 declare(strict_types=1);
 
-$PRIVATE      = dirname(__DIR__) . '/private';
-$USERS_FILE   = $PRIVATE . '/data/admin_users.php';
-$OLD_CRED     = $PRIVATE . '/data/admin_credentials.php'; // legacy single-account file (auto-migrated)
-$CONTENT_JSON = $PRIVATE . '/data/content.json';
-$RESET_FILE   = $PRIVATE . '/data/reset.json';
-$INVITES_FILE = $PRIVATE . '/data/invites.json';
-$MAX_LEN      = 2000;
-$RESET_TTL    = 3600;    // 1 hour
-$INVITE_TTL   = 259200;  // 3 days
+if (!defined('CC_ADMIN_FUNCTIONS_ONLY')) {
+    $PRIVATE      = dirname(__DIR__) . '/private';
+    $USERS_FILE   = $PRIVATE . '/data/admin_users.php';
+    $OLD_CRED     = $PRIVATE . '/data/admin_credentials.php'; // legacy single-account file (auto-migrated)
+    $CONTENT_JSON = $PRIVATE . '/data/content.json';
+    $RESET_FILE   = $PRIVATE . '/data/reset.json';
+    $INVITES_FILE = $PRIVATE . '/data/invites.json';
+    $MAX_LEN      = 2000;
+    $RESET_TTL    = 3600;    // 1 hour
+    $INVITE_TTL   = 259200;  // 3 days
 
-require $PRIVATE . '/content.php';                       // registry + cc_value() etc.
-@include_once $PRIVATE . '/environment_variables.php';   // DOMAIN + SMTP (invite / reset email)
+    require $PRIVATE . '/content.php';                       // registry + cc_value() etc.
+    @include_once $PRIVATE . '/environment_variables.php';   // DOMAIN + SMTP (invite / reset email)
 
-/* ---------- session ---------- */
-$https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/admin',
-    'httponly' => true,
-    'samesite' => 'Lax',
-    'secure'   => $https,
-]);
-session_name('cc_admin_sess');
-session_start();
+    /* ---------- session ---------- */
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/admin',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure'   => $https,
+    ]);
+    session_name('cc_admin_sess');
+    session_start();
 
-$BASEURL = ($https ? 'https' : 'http') . '://'
-         . (defined('DOMAIN') ? DOMAIN : ($_SERVER['HTTP_HOST'] ?? '')) . '/admin/';
+    $BASEURL = ($https ? 'https' : 'http') . '://'
+             . (defined('DOMAIN') ? DOMAIN : ($_SERVER['HTTP_HOST'] ?? '')) . '/admin/';
+}
 
 /* ---------- helpers ---------- */
 function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
@@ -54,22 +56,82 @@ function atomic_write(string $path, string $contents): bool
     return true;
 }
 
-/** Load accounts as [email => ['hash'=>..., 'created'=>...]]; migrate legacy file. */
-function load_users(string $usersPath, string $oldCredPath): array
+/** Sibling lock whose inode stays put when $path is replaced by rename. */
+function editor_file_lock_path(string $path): string
 {
+    return $path . '.lock';
+}
+
+/**
+ * Run $fn while this process holds the exclusive lock for $path.
+ * The lock file stays in place when $path is published with rename, so the
+ * lock does not fall off the old inode. $fn must do its read after entry
+ * and its rename before return, and must not lock $path again.
+ * Returns $fn's result, or false when the lock cannot be taken.
+ */
+function with_exclusive_lock(string $path, callable $fn): mixed
+{
+    $lockPath = editor_file_lock_path($path);
+    $fh = @fopen($lockPath, 'c');
+    if ($fh === false) return false;
+    @chmod($lockPath, 0640);
+    if (!@flock($fh, LOCK_EX)) {
+        fclose($fh);
+        return false;
+    }
+    try {
+        return $fn();
+    } finally {
+        @flock($fh, LOCK_UN);
+        fclose($fh);
+    }
+}
+
+/** Include a PHP account file after rename, not a cached copy of the old inode. */
+function fresh_include(string $path): mixed
+{
+    clearstatcache(true, $path);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($path, true);
+    }
+    return include $path;
+}
+
+/** Load accounts as [email => ['hash'=>..., 'created'=>...]]; no write. */
+function read_users(string $usersPath, string $oldCredPath): array
+{
+    clearstatcache(true, $usersPath);
     if (is_readable($usersPath)) {
-        $u = include $usersPath;
+        $u = fresh_include($usersPath);
         if (is_array($u)) return $u;
     }
+    clearstatcache(true, $oldCredPath);
     if (is_readable($oldCredPath)) {
-        $c = include $oldCredPath;
+        $c = fresh_include($oldCredPath);
         if (is_array($c) && isset($c['email'], $c['hash'])) {
-            $users = [strtolower((string)$c['email']) => ['hash' => $c['hash'], 'created' => time()]];
-            save_users($usersPath, $users);
-            return $users;
+            return [strtolower((string)$c['email']) => ['hash' => $c['hash'], 'created' => time()]];
         }
     }
     return [];
+}
+
+/** Load accounts, persisting a legacy single-account file once. */
+function load_users(string $usersPath, string $oldCredPath): array
+{
+    clearstatcache(true, $usersPath);
+    if (is_readable($usersPath)) {
+        return read_users($usersPath, $oldCredPath);
+    }
+    clearstatcache(true, $oldCredPath);
+    if (!is_readable($oldCredPath)) return [];
+    $loaded = with_exclusive_lock($usersPath, function () use ($usersPath, $oldCredPath) {
+        clearstatcache(true, $usersPath);
+        if (is_readable($usersPath)) return read_users($usersPath, $oldCredPath);
+        $users = read_users($usersPath, $oldCredPath);
+        if ($users !== []) save_users($usersPath, $users);
+        return $users;
+    });
+    return is_array($loaded) ? $loaded : read_users($usersPath, $oldCredPath);
 }
 
 function save_users(string $path, array $users): bool
@@ -79,32 +141,164 @@ function save_users(string $path, array $users): bool
     return atomic_write($path, $php);
 }
 
+/**
+ * Re-read the account file under its lock, apply $change, and rename the
+ * replacement into place before the lock is released.
+ * $change receives the fresh map and returns the map to save, or null to
+ * leave the file untouched. It must change only this action's entries.
+ */
+function update_accounts(string $usersPath, string $oldCredPath, callable $change): bool
+{
+    $saved = with_exclusive_lock($usersPath, function () use ($usersPath, $oldCredPath, $change) {
+        $updated = $change(read_users($usersPath, $oldCredPath));
+        if (!is_array($updated)) return false;
+        return save_users($usersPath, $updated);
+    });
+    return $saved === true;
+}
+
+function setup_first_editor(string $usersPath, string $oldCredPath, string $email, string $password): bool
+{
+    $email = strtolower(trim($email));
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    return update_accounts($usersPath, $oldCredPath, function (array $users) use ($email, $hash) {
+        if ($users !== []) return null;
+        $users[$email] = ['hash' => $hash, 'created' => time()];
+        return $users;
+    });
+}
+
+function remove_editor_account(string $usersPath, string $oldCredPath, string $actorEmail, string $email): bool
+{
+    $actorEmail = strtolower(trim($actorEmail));
+    $email = strtolower(trim($email));
+    return update_accounts($usersPath, $oldCredPath, function (array $users) use ($actorEmail, $email) {
+        if ($email === $actorEmail || !isset($users[$email]) || count($users) <= 1) return null;
+        unset($users[$email]);
+        return $users;
+    });
+}
+
+function change_editor_password(string $usersPath, string $oldCredPath, string $email, string $currentPassword, string $newPassword): bool
+{
+    $email = strtolower(trim($email));
+    $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+    return update_accounts($usersPath, $oldCredPath, function (array $users) use ($email, $currentPassword, $hash) {
+        $current = $users[$email]['hash'] ?? null;
+        if (!is_string($current) || !password_verify($currentPassword, $current)) return null;
+        $users[$email]['hash'] = $hash;
+        return $users;
+    });
+}
+
 /* token maps: { sha256(token) => { email, expires, ... } } — used for reset + invites */
+
+/** @return array<mixed>|null null when the file is not a JSON array */
+function read_token_map(string $path): ?array
+{
+    clearstatcache(true, $path);
+    if (!is_readable($path)) return [];
+    $map = json_decode((string) file_get_contents($path), true) ?: [];
+    return is_array($map) ? $map : null;
+}
+
+function write_token_map(string $path, array $map): bool
+{
+    $json = json_encode($map);
+    if ($json === false) return false;
+    return atomic_write($path, $json);
+}
+
 function pending_add(string $path, string $token, array $data): bool
 {
-    $map = is_readable($path) ? (json_decode((string) file_get_contents($path), true) ?: []) : [];
-    if (!is_array($map)) $map = [];
+    $saved = with_exclusive_lock($path, function () use ($path, $token, $data) {
+        return pending_add_unlocked($path, $token, $data);
+    });
+    return $saved === true;
+}
+/** Caller holds the exclusive lock for $path. */
+function pending_add_unlocked(string $path, string $token, array $data): bool
+{
+    $map = read_token_map($path) ?? [];
     $now = time();
     foreach ($map as $k => $v) {                 // prune expired
         if (!is_array($v) || ($v['expires'] ?? 0) < $now) unset($map[$k]);
     }
     $map[hash('sha256', $token)] = $data;
-    return atomic_write($path, (string) json_encode($map));
+    return write_token_map($path, $map);
 }
 function pending_lookup(string $path, string $token): ?array
 {
     if ($token === '') return null;
-    $map = is_readable($path) ? (json_decode((string) file_get_contents($path), true) ?: []) : [];
-    if (!is_array($map)) return null;
+    $map = read_token_map($path);
+    if ($map === null) return null;
     $entry = $map[hash('sha256', $token)] ?? null;
     return (is_array($entry) && time() < (int)($entry['expires'] ?? 0)) ? $entry : null;
 }
 function pending_remove(string $path, string $token): void
 {
-    $map = is_readable($path) ? (json_decode((string) file_get_contents($path), true) ?: []) : [];
-    if (!is_array($map)) return;
+    with_exclusive_lock($path, function () use ($path, $token) {
+        pending_remove_unlocked($path, $token);
+    });
+}
+/** Caller holds the exclusive lock for $path. */
+function pending_remove_unlocked(string $path, string $token): bool
+{
+    $map = read_token_map($path);
+    if ($map === null) return false;
     unset($map[hash('sha256', $token)]);
-    atomic_write($path, (string) json_encode($map));
+    return write_token_map($path, $map);
+}
+
+/**
+ * Read the token under its lock, re-read and rename the account file under
+ * the account lock, then rename the token file before releasing the token
+ * lock. The account lock is taken only while the token lock is held.
+ * $apply receives the fresh account map and token entry and returns the
+ * account map to save, or null to leave both files unchanged.
+ */
+function commit_token_account(
+    string $tokenPath,
+    string $token,
+    string $usersPath,
+    string $oldCredPath,
+    callable $apply
+): bool {
+    $saved = with_exclusive_lock($tokenPath, function () use ($tokenPath, $token, $usersPath, $oldCredPath, $apply) {
+        $entry = pending_lookup($tokenPath, $token);
+        if ($entry === null) return false;
+        $wrote = update_accounts($usersPath, $oldCredPath, function (array $users) use ($apply, $entry) {
+            return $apply($users, $entry);
+        });
+        if ($wrote !== true) return false;
+        return pending_remove_unlocked($tokenPath, $token);
+    });
+    return $saved === true;
+}
+
+function save_reset_password(string $usersPath, string $oldCredPath, string $resetPath, string $token, string $newPassword): bool
+{
+    $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+    return commit_token_account($resetPath, $token, $usersPath, $oldCredPath, function (array $users, array $entry) use ($hash) {
+        $email = strtolower(trim((string)($entry['email'] ?? '')));
+        if ($email === '' || !isset($users[$email]) || !is_array($users[$email])) return null;
+        $users[$email]['hash'] = $hash;
+        return $users;
+    });
+}
+
+function accept_editor_invite(string $usersPath, string $oldCredPath, string $invitesPath, string $token, string $password): ?string
+{
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $accepted = null;
+    $ok = commit_token_account($invitesPath, $token, $usersPath, $oldCredPath, function (array $users, array $entry) use ($hash, &$accepted) {
+        $email = strtolower(trim((string)($entry['email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+        $users[$email] = ['hash' => $hash, 'created' => time()];
+        $accepted = $email;
+        return $users;
+    });
+    return $ok ? $accepted : null;
 }
 
 /** Send mail via the site's SMTP settings (same as the contact form). */
@@ -154,6 +348,10 @@ function redirect(string $flash = '', string $type = 'ok'): void
     exit;
 }
 
+if (defined('CC_ADMIN_FUNCTIONS_ONLY')) {
+    return;
+}
+
 /* ---------- state ---------- */
 $users      = load_users($USERS_FILE, $OLD_CRED);
 $needsSetup = empty($users);
@@ -176,14 +374,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (strlen($p) < 8) $errors[] = 'Password must be at least 8 characters.';
         if ($p !== $p2)     $errors[] = 'The two passwords do not match.';
         if (!$errors) {
-            $users[$em] = ['hash' => password_hash($p, PASSWORD_DEFAULT), 'created' => time()];
-            if (save_users($USERS_FILE, $users)) {
+            if (setup_first_editor($USERS_FILE, $OLD_CRED, $em, $p)) {
                 session_regenerate_id(true);
                 $_SESSION['cc_admin'] = true;
                 $_SESSION['cc_user']  = $em;
                 redirect('Editor account created. You are signed in.');
             }
-            $errors[] = 'Could not save the account (file permissions?).';
+            $current = load_users($USERS_FILE, $OLD_CRED);
+            if ($current !== []) {
+                $users = $current;
+                $needsSetup = false;
+                $errors[] = 'An editor account already exists. Please sign in.';
+            } else {
+                $errors[] = 'Could not save the account (file permissions?).';
+            }
         }
 
     } elseif ($action === 'login' && !$needsSetup) {
@@ -232,20 +436,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $p     = (string)($_POST['password'] ?? '');
         $p2    = (string)($_POST['password2'] ?? '');
         $em    = $res ? strtolower((string)$res['email']) : '';
-        if (!$res || !isset($users[$em])) {
+        if (!$res) {
             $errors[] = 'This reset link is invalid or has expired. Please request a new one.';
         } elseif (strlen($p) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         } elseif ($p !== $p2) {
             $errors[] = 'The two passwords do not match.';
         } else {
-            $users[$em]['hash'] = password_hash($p, PASSWORD_DEFAULT);
-            if (save_users($USERS_FILE, $users)) {
-                pending_remove($RESET_FILE, $token);
+            if (save_reset_password($USERS_FILE, $OLD_CRED, $RESET_FILE, $token, $p)) {
                 unset($_SESSION['cc_fail']);
                 redirect('Your password has been reset. Please sign in.');
             }
-            $errors[] = 'Could not update the password.';
+            $fresh = read_users($USERS_FILE, $OLD_CRED);
+            if (pending_lookup($RESET_FILE, $token) === null || !isset($fresh[$em])) {
+                $errors[] = 'This reset link is invalid or has expired. Please request a new one.';
+            } else {
+                $errors[] = 'Could not update the password.';
+            }
         }
 
     } elseif ($action === 'invite_accept') {
@@ -260,10 +467,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($p !== $p2) {
             $errors[] = 'The two passwords do not match.';
         } else {
-            $em = strtolower((string)$inv['email']);
-            $users[$em] = ['hash' => password_hash($p, PASSWORD_DEFAULT), 'created' => time()];
-            if (save_users($USERS_FILE, $users)) {
-                pending_remove($INVITES_FILE, $token);
+            $em = accept_editor_invite($USERS_FILE, $OLD_CRED, $INVITES_FILE, $token, $p);
+            if ($em !== null) {
                 session_regenerate_id(true);
                 $_SESSION['cc_admin'] = true;
                 $_SESSION['cc_user']  = $em;
@@ -295,9 +500,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif (!isset($users[$em]))  $errors[] = 'That editor was not found.';
         elseif (count($users) <= 1)   $errors[] = 'You cannot remove the only editor.';
         else {
-            unset($users[$em]);
-            save_users($USERS_FILE, $users);
-            redirect($em . ' has been removed as an editor.');
+            if (remove_editor_account($USERS_FILE, $OLD_CRED, $user, $em)) {
+                redirect($em . ' has been removed as an editor.');
+            }
+            $fresh = read_users($USERS_FILE, $OLD_CRED);
+            if (!isset($fresh[$em])) $errors[] = 'That editor was not found.';
+            elseif (count($fresh) <= 1) $errors[] = 'You cannot remove the only editor.';
+            else $errors[] = 'That editor could not be removed. Please try again.';
         }
 
     } elseif ($action === 'logout') {
@@ -330,9 +539,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif (strlen($p) < 8) $errors[] = 'New password must be at least 8 characters.';
         elseif ($p !== $p2)     $errors[] = 'The two new passwords do not match.';
         else {
-            $users[$user]['hash'] = password_hash($p, PASSWORD_DEFAULT);
-            if (save_users($USERS_FILE, $users)) redirect('Password updated.');
-            $errors[] = 'Could not update the password.';
+            if (change_editor_password($USERS_FILE, $OLD_CRED, $user, $cur, $p)) {
+                redirect('Password updated.');
+            }
+            $fresh = read_users($USERS_FILE, $OLD_CRED);
+            $freshHash = $fresh[$user]['hash'] ?? null;
+            if (!is_string($freshHash) || !password_verify($cur, $freshHash)) {
+                $errors[] = 'Current password is incorrect.';
+            } else {
+                $errors[] = 'Could not update the password.';
+            }
         }
     }
 }
