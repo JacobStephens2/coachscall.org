@@ -118,6 +118,19 @@ try {
         }
         echo "PASS $page\n";
     }
+
+    foreach (['renderHeader', 'renderBottomBar'] as $render) {
+        ob_start();
+        try {
+            PublicNavigation::$render('contact-resutl');
+        } catch (InvalidArgumentException | TypeError) {
+            continue;
+        } finally {
+            ob_end_clean();
+        }
+        throw new RuntimeException("$render accepted an unknown public page identity");
+    }
+    echo "PASS unknown public page identity\n";
 } finally {
     set_include_path($includePath);
     unlink("$fixture/private/environment_variables.php");

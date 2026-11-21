@@ -3,7 +3,7 @@ require 'private/environment_variables.php';
 require_once 'private/content.php';
 require_once __DIR__ . '/partials/public-navigation.php';
 
-$publicPage = 'home';
+$publicPage = PublicNavigation::HOME;
 ?>
 
 <!-- saved from url=(0023)https://<?php echo DOMAIN; ?>/ -->

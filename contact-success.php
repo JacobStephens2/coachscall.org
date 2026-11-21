@@ -3,7 +3,7 @@ require 'private/environment_variables.php';
 require_once 'private/content.php';
 require_once __DIR__ . '/partials/public-navigation.php';
 
-$publicPage = 'contact-result';
+$publicPage = PublicNavigation::CONTACT_RESULT;
 ?>
 <!DOCTYPE html>
 <!-- saved from url=(0031)https://<?php echo DOMAIN; ?>/success/ -->

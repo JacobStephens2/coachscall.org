@@ -2,8 +2,14 @@
 
 final class PublicNavigation
 {
+    public const HOME = 'home';
+    public const ABOUT = 'about';
+    public const WORK = 'work';
+    public const CONTACT = 'contact';
+    public const CONTACT_RESULT = 'contact-result';
+
     private const DESTINATIONS = [
-        'about' => [
+        self::ABOUT => [
             'path' => '/about',
             'label' => 'About',
             'sections' => [
@@ -11,7 +17,7 @@ final class PublicNavigation
                 'mission-vision' => ' Mission | Vision',
             ],
         ],
-        'work' => [
+        self::WORK => [
             'path' => '/work',
             'label' => 'Work',
             'sections' => [
@@ -19,7 +25,7 @@ final class PublicNavigation
                 'mentoring' => "  One on one mentoring\u{00A0}and small group\u{00A0}sessions",
             ],
         ],
-        'contact' => [
+        self::CONTACT => [
             'path' => '/contact',
             'label' => 'Contact',
             'sections' => [
@@ -28,6 +34,13 @@ final class PublicNavigation
             ],
         ],
     ];
+
+    private static function requireKnownPage(string $page): void
+    {
+        if ($page !== self::HOME && $page !== self::CONTACT_RESULT && !isset(self::DESTINATIONS[$page])) {
+            throw new InvalidArgumentException("Unknown public page identity: $page");
+        }
+    }
 
     private static function href(string $path): string
     {
@@ -41,7 +54,8 @@ final class PublicNavigation
 
     public static function renderBottomBar(string $page): void
     {
-        $slideOut = $page === 'contact-result' ? ' slideOut' : '';
+        self::requireKnownPage($page);
+        $slideOut = $page === self::CONTACT_RESULT ? ' slideOut' : '';
         ?>
         <div id="animated-example" class="bottom-bar animated row<?= $slideOut ?>">
             <div class="header-bar"></div>
@@ -60,11 +74,12 @@ final class PublicNavigation
 
     public static function renderHeader(string $page): void
     {
+        self::requireKnownPage($page);
         ?>
         <header class="header">
             <div style="margin: 0px auto; padding: 1rem 1rem 1rem 0px;">
                 <div class="container">
-                    <div class="logo-box"><a <?= self::currentAttributes($page, 'home') ?>href="<?= self::href('/') ?>"><svg class="header-logo"
+                    <div class="logo-box"><a <?= self::currentAttributes($page, self::HOME) ?>href="<?= self::href('/') ?>"><svg class="header-logo"
                                 version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 634.3 93.6"
                                 xml:space="preserve">
                                 <style type="text/css">
