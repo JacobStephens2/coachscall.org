@@ -16,15 +16,16 @@ declare(strict_types=1);
 $PRIVATE      = dirname(__DIR__) . '/private';
 $USERS_FILE   = $PRIVATE . '/data/admin_users.php';
 $OLD_CRED     = $PRIVATE . '/data/admin_credentials.php'; // legacy single-account file (auto-migrated)
-$CONTENT_JSON = $PRIVATE . '/data/content.json';
 $RESET_FILE   = $PRIVATE . '/data/reset.json';
 $INVITES_FILE = $PRIVATE . '/data/invites.json';
-$MAX_LEN      = 2000;
 $RESET_TTL    = 3600;    // 1 hour
 $INVITE_TTL   = 259200;  // 3 days
 
-require $PRIVATE . '/content.php';                       // registry + cc_value() etc.
+require_once $PRIVATE . '/atomic_write.php';
+require_once $PRIVATE . '/content.php';
 @include_once $PRIVATE . '/environment_variables.php';   // DOMAIN + SMTP (invite / reset email)
+
+$pageText = new EditablePageText();
 
 /* ---------- session ---------- */
 $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -44,15 +45,6 @@ $BASEURL = ($https ? 'https' : 'http') . '://'
 
 /* ---------- helpers ---------- */
 function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
-
-function atomic_write(string $path, string $contents): bool
-{
-    $tmp = $path . '.tmp' . bin2hex(random_bytes(4));
-    if (@file_put_contents($tmp, $contents, LOCK_EX) === false) return false;
-    if (!@rename($tmp, $path)) { @unlink($tmp); return false; }
-    @chmod($path, 0640);
-    return true;
-}
 
 /** Load accounts as [email => ['hash'=>..., 'created'=>...]]; migrate legacy file. */
 function load_users(string $usersPath, string $oldCredPath): array
@@ -307,17 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } elseif ($action === 'save' && $loggedIn) {
-        $overrides = [];
-        foreach ($GLOBALS['CC_FIELDS'] as $group) {
-            foreach ($group['fields'] as $key => $meta) {
-                $raw = str_replace("\r\n", "\n", (string)($_POST['f'][$key] ?? ''));
-                if (mb_strlen($raw) > $GLOBALS['MAX_LEN']) $raw = mb_substr($raw, 0, $GLOBALS['MAX_LEN']);
-                $val = trim($raw);
-                if ($val !== '' && $val !== (string)($meta['default'] ?? '')) $overrides[$key] = $val;
-            }
-        }
-        $json = json_encode($overrides, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($json !== false && atomic_write($GLOBALS['CONTENT_JSON'], $json)) {
+        if ($pageText->save($_POST['f'] ?? null)) {
             redirect('Saved. Your changes are now live on the site.');
         }
         $errors[] = 'Could not save changes (file permissions?).';
@@ -356,14 +338,7 @@ if (!$loggedIn && $resetToken !== '' && !$resetOk && $action !== 'reset_save') {
     $errors[] = 'This reset link is invalid or has expired. Please request a new one.';
 }
 
-/* ---------- value to show in an editor field (posted-on-error, else current) ---------- */
-function field_display(string $key): string
-{
-    if (($_POST['action'] ?? '') === 'save' && isset($_POST['f'][$key])) {
-        return str_replace("\r\n", "\n", (string)$_POST['f'][$key]);
-    }
-    return cc_value($key);
-}
+$submitted = $_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save' ? ($_POST['f'] ?? null) : null;
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -542,18 +517,25 @@ function field_display(string $key): string
       <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
       <input type="hidden" name="action" value="save">
 
-      <?php foreach ($GLOBALS['CC_FIELDS'] as $group): ?>
+      <?php foreach ($pageText->editorFields($submitted) as $group): ?>
         <div class="card">
           <h2><?= e($group['label']) ?></h2>
-          <?php foreach ($group['fields'] as $key => $meta): ?>
+          <?php foreach ($group['fields'] as $field): ?>
             <label class="fld">
-              <span class="lab"><?= e($meta['label']) ?>
-                <?php if (!empty($meta['help'])): ?><span class="help">— <?= e($meta['help']) ?></span><?php endif; ?>
+              <span class="lab"><?= e($field['label']) ?>
+                <?php if (!empty($field['help'])): ?><span class="help">— <?= e($field['help']) ?></span><?php endif; ?>
               </span>
-              <?php if (($meta['type'] ?? 'text') === 'multiline'): ?>
-                <textarea name="f[<?= e($key) ?>]" rows="3" maxlength="<?= (int)$MAX_LEN ?>"><?= e(field_display($key)) ?></textarea>
+              <?php if ($field['type'] === 'multiline'): ?>
+                <?php
+                $value = $field['value'];
+                // HTML discards the first newline immediately after a textarea start tag.
+                if (strspn($value, "\r\n", 0, 1) === 1) {
+                    $value = "\n" . $value;
+                }
+                ?>
+                <textarea name="f[<?= e($field['key']) ?>]" rows="3" maxlength="<?= $field['limit'] ?>"><?= e($value) ?></textarea>
               <?php else: ?>
-                <input type="text" name="f[<?= e($key) ?>]" maxlength="<?= (int)$MAX_LEN ?>" value="<?= e(field_display($key)) ?>">
+                <input type="text" name="f[<?= e($field['key']) ?>]" maxlength="<?= $field['limit'] ?>" value="<?= e($field['value']) ?>">
               <?php endif; ?>
             </label>
           <?php endforeach; ?>

@@ -1,6 +1,7 @@
 <?php
 require 'private/environment_variables.php';
-require_once 'private/content.php';
+require_once __DIR__ . '/private/content.php';
+$pageText = new EditablePageText();
 require_once __DIR__ . '/partials/public-navigation.php';
 
 $publicPage = PublicNavigation::WORK;
@@ -23038,8 +23039,8 @@ $publicPage = PublicNavigation::WORK;
 													</polygon>
 												</svg></div>
 											<div class="order-lg-1 introText col-lg-8">
-												<h1><?php cc_lines('work.hero.heading'); ?></h1>
-												<p class="subhead"><?php cc('work.hero.subhead'); ?></p>
+												<h1><?= $pageText->lineBreakHtml('work.hero.heading') ?></h1>
+												<p class="subhead"><?= $pageText->escapedText('work.hero.subhead') ?></p>
 												<p class="intro-body"></p>
 											</div>
 										</div>
@@ -23048,8 +23049,8 @@ $publicPage = PublicNavigation::WORK;
 							</div>
 							<div class="work-container"><span><a id="seminars-and-workshops" class="anchor"></a>
 									<section class="work-area">
-										<h2><?php cc('work.seminars.heading'); ?></h2>
-										<p class="subhead"><?php cc('work.seminars.subhead'); ?></p>
+										<h2><?= $pageText->escapedText('work.seminars.heading') ?></h2>
+										<p class="subhead"><?= $pageText->escapedText('work.seminars.subhead') ?></p>
 										<ul>
 											<li><b>Biblically-based content</b><span> </span>that explores the
 												connection of the theology of Christian life to&nbsp;sport</li>
@@ -23106,8 +23107,8 @@ $publicPage = PublicNavigation::WORK;
 										</div>
 									</a></section><span><a id="mentoring" class="anchor"></a>
 									<section class="work-area">
-										<h2><?php cc('work.consulting.heading'); ?></h2>
-										<p class="subhead"><?php cc('work.consulting.subhead'); ?></p>
+										<h2><?= $pageText->escapedText('work.consulting.heading') ?></h2>
+										<p class="subhead"><?= $pageText->escapedText('work.consulting.subhead') ?></p>
 										<ul>
 											<li><b>Engaging coaches</b><span> </span>where they are in their journey and
 												helping them develop more fully their view of what God requires of the
@@ -23173,7 +23174,7 @@ $publicPage = PublicNavigation::WORK;
 								<div class="tagline-container container">
 									<div class="tagline-row row">
 										<div class="tagline-col col-xxl-7 col-md-9 col-sm-9 col-8">
-											<p class="subhead tagline"><?php cc('shared.footer.tagline'); ?></p>
+											<p class="subhead tagline"><?= $pageText->escapedText('shared.footer.tagline') ?></p>
 										</div>
 										<div
 											class="justify-end contact-section-crest-col col-xxl-5 col-md-2 col-sm-3 col-4">
