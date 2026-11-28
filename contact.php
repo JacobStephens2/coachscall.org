@@ -23067,8 +23067,8 @@ $publicPage = PublicNavigation::CONTACT;
 														</polygon>
 													</svg></div>
 												<div class="order-lg-1 introText col-lg-8">
-													<h1><?= $pageText->text('contact.hero.heading') ?></h1>
-													<p class="subhead"><?= $pageText->text('contact.hero.subhead') ?></p>
+													<h1><?= $pageText->escapedText('contact.hero.heading') ?></h1>
+													<p class="subhead"><?= $pageText->escapedText('contact.hero.subhead') ?></p>
 													<p class="intro-body"></p><a
 														href="mailto:john@<?php echo DOMAIN; ?>"><button type="button"
 															class="btn btn-primary">EMAIL JOHN</button></a>
@@ -23079,7 +23079,7 @@ $publicPage = PublicNavigation::CONTACT;
 								</div>
 								<div class="contact-container container"><a id="contact-form" class="anchor"></a>
 									<form action="https://<?php echo DOMAIN; ?>/email/send_email" method="POST">
-										<h2 style="margin-bottom: 16px;"><?= $pageText->text('contact.contactjohn.heading') ?></h2>
+										<h2 style="margin-bottom: 16px;"><?= $pageText->escapedText('contact.contactjohn.heading') ?></h2>
 										<div class="form-field"><label for="email"
 												style="display: block; margin-bottom: 4px;">Your Email</label><input
 												name="email" id="email" type="email" required="">
@@ -23164,11 +23164,11 @@ $publicPage = PublicNavigation::CONTACT;
 								</section><span id="call"></span>
 								<section class="one-col-section">
 									<div class="lets-connect container">
-										<h2><?= $pageText->text('contact.connect.heading') ?></h2>
-										<p><?= $pageText->text('contact.connect.quote') ?> <cite class="connect-cite"><?= $pageText->text('contact.connect.cite') ?></cite></p>
+										<h2><?= $pageText->escapedText('contact.connect.heading') ?></h2>
+										<p><?= $pageText->escapedText('contact.connect.quote') ?> <cite class="connect-cite"><?= $pageText->escapedText('contact.connect.cite') ?></cite></p>
 										<div class="col"><span class="contact-text">
-												<p><a href="tel:<?= $pageText->text('contact.phone') ?>"><i class="fas fa-phone-alt"
-															aria-hidden="true"></i>  <?= $pageText->text('contact.phone') ?></a></p>
+												<p><a href="tel:<?= $pageText->escapedText('contact.phone') ?>"><i class="fas fa-phone-alt"
+															aria-hidden="true"></i>  <?= $pageText->escapedText('contact.phone') ?></a></p>
 												<p><a href="mailto:john@<?php echo DOMAIN; ?>"><i class="far fa-envelope"
 															aria-hidden="true"></i>  john@<?php echo DOMAIN; ?></a></p>
 											</span></div><a aria-current="page" class=""
@@ -23180,7 +23180,7 @@ $publicPage = PublicNavigation::CONTACT;
 									<div class="tagline-container container">
 										<div class="tagline-row row">
 											<div class="tagline-col col-xxl-7 col-md-9 col-sm-9 col-8">
-												<p class="subhead tagline"><?= $pageText->text('shared.footer.tagline') ?></p>
+												<p class="subhead tagline"><?= $pageText->escapedText('shared.footer.tagline') ?></p>
 											</div>
 											<div
 												class="justify-end contact-section-crest-col col-xxl-5 col-md-2 col-sm-3 col-4">

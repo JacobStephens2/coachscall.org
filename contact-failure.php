@@ -22812,7 +22812,7 @@ $publicPage = PublicNavigation::CONTACT_RESULT;
 								<div class="tagline-container container">
 									<div class="tagline-row row">
 										<div class="tagline-col col-xxl-7 col-md-9 col-sm-9 col-8">
-											<p class="subhead tagline"><?= $pageText->text('shared.footer.tagline') ?></p>
+											<p class="subhead tagline"><?= $pageText->escapedText('shared.footer.tagline') ?></p>
 										</div>
 										<div
 											class="justify-end contact-section-crest-col col-xxl-5 col-md-2 col-sm-3 col-4">

@@ -23025,8 +23025,8 @@ font-display: auto;
                           </div>
 
                           <div class="order-lg-1 introText col-lg-8">
-                            <h1 ><?= $pageText->text('home.hero.heading') ?></h1>
-                            <p class="subhead"><?= $pageText->text('home.hero.subhead') ?></p>
+                            <h1 ><?= $pageText->escapedText('home.hero.heading') ?></h1>
+                            <p class="subhead"><?= $pageText->escapedText('home.hero.subhead') ?></p>
                             <p class="intro-body">
                             </p>
                           </div>
@@ -24168,7 +24168,7 @@ label.style.display = 'none';
                   <section class="grey-section quote-section undefined">
                     <div class="quote-center container">
                       <div class="col-lg-8">
-                        <q ><?= $pageText->lines('home.quote.text') ?></q>
+                        <q ><?= $pageText->lineBreakHtml('home.quote.text') ?></q>
                         <cite class="quote-section-cite">
                           C.S. Lewis, 
                           <i >
@@ -24254,7 +24254,7 @@ lacrosse coach, Calvin University
                     <div class="tagline-container container">
                       <div class="tagline-row row">
                         <div class="tagline-col col-xxl-7 col-md-9 col-sm-9 col-8">
-                          <p class="subhead tagline"><?= $pageText->text('shared.footer.tagline') ?></p>
+                          <p class="subhead tagline"><?= $pageText->escapedText('shared.footer.tagline') ?></p>
                         </div>
                         <div class="justify-end contact-section-crest-col col-xxl-5 col-md-2 col-sm-3 col-4">
                           <svg id="Crest" viewbox="0 0 199.77 257.3">

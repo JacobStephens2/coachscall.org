@@ -75,19 +75,20 @@ final class EditablePageText
         return true;
     }
 
-    public function text(string $key): string
+    /** Escape for HTML element text and quoted attributes. */
+    public function escapedText(string $key): string
     {
         return htmlspecialchars($this->value($key), ENT_QUOTES, 'UTF-8');
     }
 
-    public function lines(string $key): string
+    public function lineBreakHtml(string $key): string
     {
-        return nl2br($this->text($key), false);
+        return nl2br($this->escapedText($key), false);
     }
 
-    public function bio(string $key): string
+    public function bioHtml(string $key): string
     {
-        $parts = explode(' | ', $this->text($key));
+        $parts = explode(' | ', $this->escapedText($key));
         foreach ($parts as $index => $part) {
             if ($index < 2) {
                 $parts[$index] = "<b>$part</b>";

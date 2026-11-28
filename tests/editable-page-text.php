@@ -73,7 +73,7 @@ try {
 
     foreach (['{', '"not a field map"'] as $document) {
         file_put_contents($path, $document);
-        expectSame('Deepening coach impact', (new EditablePageText($path))->text('home.hero.heading'), 'unusable JSON document falls back');
+        expectSame('Deepening coach impact', (new EditablePageText($path))->escapedText('home.hero.heading'), 'unusable JSON document falls back');
     }
     $original = [
         'home.hero.heading' => '',
@@ -94,10 +94,10 @@ try {
     expectSame('To become holy is rather like joining a secret society.' . "\n" . 'To put it at the very lowest, it must be great fun.', $fields['home.quote.text']['value'], 'array saved value falls back');
     expectSame('John Levis, Founder', $fields['about.founder.heading']['value'], 'numeric saved value falls back');
     expectSame('And winning and losing do matter', $fields['work.hero.subhead']['value'], 'null saved value falls back');
-    expectSame('   ', $content->text('contact.phone'), 'legacy nonempty whitespace loads verbatim');
+    expectSame('   ', $content->escapedText('contact.phone'), 'legacy nonempty whitespace loads verbatim');
     expectSame(" First\r\nSecond\rThird\n ", $fields['about.hero.heading']['value'], 'legacy newlines and spaces load verbatim');
-    expectSame(" First<br>\r\nSecond<br>\rThird<br>\n ", $content->lines('about.hero.heading'), 'legacy line breaks retain nl2br formatting');
-    expectSame('', $content->text('unknown'), 'unregistered saved key is not editable page text');
+    expectSame(" First<br>\r\nSecond<br>\rThird<br>\n ", $content->lineBreakHtml('about.hero.heading'), 'legacy line breaks retain nl2br formatting');
+    expectSame('', $content->escapedText('unknown'), 'unregistered saved key is not editable page text');
     echo "PASS saved value fallback and legacy formatting\n";
 
     $limitInput = " \r\n" . str_repeat('é', 1997) . 'Zdiscard';
@@ -130,12 +130,12 @@ try {
         'shared.footer.tagline' => 'Café / sport & rest',
     ], json_decode($encoded, true, 512, JSON_THROW_ON_ERROR), 'save normalizes, caps by UTF-8 characters, trims, and replaces the full override document');
     expectSame(true, str_contains($encoded, "\n    \"shared.footer.tagline\": \"Café / sport & rest\"\n"), 'legacy JSON encoding flags');
-    expectSame('Café / sport &amp; rest', $content->text('shared.footer.tagline'), 'same instance reflects successful save');
+    expectSame('Café / sport &amp; rest', $content->escapedText('shared.footer.tagline'), 'same instance reflects successful save');
     $fresh = new EditablePageText($path);
     expectSame($content->editorFields(), $fresh->editorFields(), 'fresh read after save');
-    expectSame('555.0100&quot; data-fixture=&quot;phone', $fresh->text('contact.phone'), 'text escapes for attributes');
-    expectSame("First &lt;line&gt;<br>\nSecond &amp; final", $fresh->lines('work.hero.heading'), 'lines escape before converting newlines');
-    expectSame('<b>3 &amp; years</b> | <b>&lt;captain&gt;</b> | A &lt;story&gt; | fourth', $fresh->bio('about.bio.christ'), 'bio escapes and bolds the first two spaced-pipe parts');
+    expectSame('555.0100&quot; data-fixture=&quot;phone', $fresh->escapedText('contact.phone'), 'text escapes for attributes');
+    expectSame("First &lt;line&gt;<br>\nSecond &amp; final", $fresh->lineBreakHtml('work.hero.heading'), 'lines escape before converting newlines');
+    expectSame('<b>3 &amp; years</b> | <b>&lt;captain&gt;</b> | A &lt;story&gt; | fourth', $fresh->bioHtml('about.bio.christ'), 'bio escapes and bolds the first two spaced-pipe parts');
     echo "PASS save, reload, projection, and public formatting\n";
 
     expectSame(false, $content->save(['shared.footer.tagline' => "\xFF"]), 'encoding failure leaves stored content intact');
@@ -143,13 +143,13 @@ try {
     unlink($path);
     mkdir($path);
     expectSame(false, $content->save(['shared.footer.tagline' => 'Failed replacement']), 'atomic replacement fails when the destination is a directory');
-    expectSame('Café / sport &amp; rest', $content->text('shared.footer.tagline'), 'failed save retains the loaded snapshot');
+    expectSame('Café / sport &amp; rest', $content->escapedText('shared.footer.tagline'), 'failed save retains the loaded snapshot');
     expectSame([], glob("$path.tmp*"), 'failed replacement cleans up its temporary write');
     rmdir($path);
 
     expectSame(true, $fresh->save(['home.hero.heading' => '', 'shared.footer.tagline' => 'Glorifying God and Experiencing Joy Through Sports']), 'restore defaults');
     expectSame('[]', file_get_contents($path), 'restoration writes an empty flat overrides document');
-    expectSame('Deepening coach impact', (new EditablePageText($path))->text('home.hero.heading'), 'restored default after reload');
+    expectSame('Deepening coach impact', (new EditablePageText($path))->escapedText('home.hero.heading'), 'restored default after reload');
     echo "PASS failed save and default restoration\n";
 } finally {
     if (is_file($path)) {

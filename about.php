@@ -23022,8 +23022,8 @@ $publicPage = PublicNavigation::ABOUT;
 													</polygon>
 												</svg></div>
 											<div class="order-lg-1 introText col-lg-8">
-												<h1 class="about-hero-title"><?= $pageText->lines('about.hero.heading') ?></h1>
-												<p class="subhead"><?= $pageText->text('about.hero.subhead') ?></p>
+												<h1 class="about-hero-title"><?= $pageText->lineBreakHtml('about.hero.heading') ?></h1>
+												<p class="subhead"><?= $pageText->escapedText('about.hero.subhead') ?></p>
 												<p class="intro-body"></p>
 											</div>
 										</div>
@@ -23034,8 +23034,8 @@ $publicPage = PublicNavigation::ABOUT;
 								<div class="flex-start about-main-section row">
 									<div class="col-lg-6 col-sm-12">
 										<div class="text-col about-text-col container">
-											<h2><?= $pageText->text('about.founder.heading') ?></h2>
-											<p class="subhead bold"><?= $pageText->text('about.founder.subhead') ?></p>
+											<h2><?= $pageText->escapedText('about.founder.heading') ?></h2>
+											<p class="subhead bold"><?= $pageText->escapedText('about.founder.subhead') ?></p>
 											<ul>
 												<li class="education-section"><b>Education</b>
 													<div class="row">
@@ -23065,8 +23065,8 @@ $publicPage = PublicNavigation::ABOUT;
 															</div>
 														</div>
 														<div class="col">
-															<p><em><?= $pageText->text('about.edu.degree1') ?></em></p>
-															<p><?= $pageText->text('about.edu.school1') ?></p>
+															<p><em><?= $pageText->escapedText('about.edu.degree1') ?></em></p>
+															<p><?= $pageText->escapedText('about.edu.school1') ?></p>
 														</div>
 													</div>
 													<hr class="education-rule">
@@ -23095,18 +23095,18 @@ $publicPage = PublicNavigation::ABOUT;
 															</div>
 														</div>
 														<div class="col">
-															<p><em><?= $pageText->text('about.edu.degree2') ?></em></p>
-															<p><?= $pageText->text('about.edu.school2') ?></p>
+															<p><em><?= $pageText->escapedText('about.edu.degree2') ?></em></p>
+															<p><?= $pageText->escapedText('about.edu.school2') ?></p>
 														</div>
 													</div>
 												</li>
-												<li><?= $pageText->bio('about.bio.christ') ?></li>
-												<li><?= $pageText->bio('about.bio.family') ?></li>
-												<li><?= $pageText->bio('about.bio.coach') ?></li>
-												<li><?= $pageText->bio('about.bio.athlete') ?></li>
-												<li><?= $pageText->bio('about.bio.younglife') ?></li>
-												<li><?= $pageText->bio('about.bio.corporate') ?></li>
-												<li><?= $pageText->bio('about.bio.admin') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.christ') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.family') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.coach') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.athlete') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.younglife') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.corporate') ?></li>
+												<li><?= $pageText->bioHtml('about.bio.admin') ?></li>
 											</ul><a href="https://<?php echo DOMAIN; ?>/contact"><button type="button"
 													class="btn btn-primary">LEARN MORE</button></a>
 										</div>
@@ -23230,7 +23230,7 @@ $publicPage = PublicNavigation::ABOUT;
 								<div class="tagline-container container">
 									<div class="tagline-row row">
 										<div class="tagline-col col-xxl-7 col-md-9 col-sm-9 col-8">
-											<p class="subhead tagline"><?= $pageText->text('shared.footer.tagline') ?></p>
+											<p class="subhead tagline"><?= $pageText->escapedText('shared.footer.tagline') ?></p>
 										</div>
 										<div
 											class="justify-end contact-section-crest-col col-xxl-5 col-md-2 col-sm-3 col-4">
