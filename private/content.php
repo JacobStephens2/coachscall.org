@@ -1,80 +1,113 @@
 <?php
-/**
- * Editable-content bootstrap.
- *
- * Loads the field registry (defaults) and any saved overrides
- * (private/content.json, written by the /admin editor), and exposes small
- * helpers the public pages use to print text:
- *
- *   cc('key')        - print escaped text (headings, paragraphs, attributes)
- *   cc_lines('key')  - print escaped text with newlines turned into <br>
- *   cc_value('key')  - return the raw string (no escaping/printing)
- *
- * Every field falls back to its registered default, so pages render correctly
- * even if content.json is missing or a key is unset.
- */
-if (!defined('CC_CONTENT_LOADED')) {
-    define('CC_CONTENT_LOADED', true);
 
-    $GLOBALS['CC_FIELDS'] = require __DIR__ . '/content_fields.php';
+require_once __DIR__ . '/atomic_write.php';
 
-    $GLOBALS['CC_OVERRIDES'] = [];
-    $ccFile = __DIR__ . '/data/content.json';
-    if (is_readable($ccFile)) {
-        $decoded = json_decode((string) file_get_contents($ccFile), true);
-        if (is_array($decoded)) {
-            $GLOBALS['CC_OVERRIDES'] = $decoded;
-        }
-    }
+final class EditablePageText
+{
+    private const FIELD_LIMIT = 2000;
 
-    /** Look up a field's definition across all groups. */
-    function cc_field_meta(string $key): ?array
+    private $path;
+    private $groups;
+    private $fieldsByKey = [];
+    private $overrides = [];
+
+    public function __construct(string $path = __DIR__ . '/data/content.json')
     {
-        foreach ($GLOBALS['CC_FIELDS'] as $group) {
-            if (isset($group['fields'][$key])) {
-                return $group['fields'][$key];
+        $this->path = $path;
+        $this->groups = require __DIR__ . '/content_fields.php';
+        foreach ($this->groups as $group) {
+            foreach ($group['fields'] as $key => $field) {
+                $this->fieldsByKey[$key] = $field;
             }
         }
-        return null;
-    }
 
-    /** Raw saved value if set and non-empty, otherwise the registered default. */
-    function cc_value(string $key): string
-    {
-        if (array_key_exists($key, $GLOBALS['CC_OVERRIDES'])) {
-            $v = $GLOBALS['CC_OVERRIDES'][$key];
-            if (is_string($v) && $v !== '') {
-                return $v;
+        if (is_file($this->path) && is_readable($this->path)) {
+            $decoded = json_decode((string) @file_get_contents($this->path), true);
+            if (is_array($decoded)) {
+                $this->overrides = $decoded;
             }
         }
-        $meta = cc_field_meta($key);
-        return isset($meta['default']) ? (string) $meta['default'] : '';
     }
 
-    /** Print escaped text (safe in element text and attribute contexts). */
-    function cc(string $key): void
+    /** Project the form with any values submitted in a save request. */
+    public function editorFields($submitted = null): array
     {
-        echo htmlspecialchars(cc_value($key), ENT_QUOTES, 'UTF-8');
-    }
-
-    /** Print escaped text with newlines converted to <br>. */
-    function cc_lines(string $key): void
-    {
-        echo nl2br(htmlspecialchars(cc_value($key), ENT_QUOTES, 'UTF-8'), false);
-    }
-
-    /**
-     * Print a "years | role | description" bio line, showing the first two
-     * pipe-separated parts in bold (matches the About page timeline markup).
-     */
-    function cc_bio(string $key): void
-    {
-        $parts = explode(' | ', cc_value($key));
-        $out = [];
-        foreach ($parts as $i => $part) {
-            $p = htmlspecialchars($part, ENT_QUOTES, 'UTF-8');
-            $out[] = ($i < 2) ? "<b>$p</b>" : $p;
+        $groups = [];
+        foreach ($this->groups as $group) {
+            $fields = [];
+            foreach ($group['fields'] as $key => $field) {
+                $fields[] = [
+                    'key' => $key,
+                    'label' => $field['label'],
+                    'help' => $field['help'] ?? null,
+                    'type' => $field['type'],
+                    'limit' => self::FIELD_LIMIT,
+                    'value' => $this->submittedValue($submitted, $key) ?? $this->value($key),
+                ];
+            }
+            $groups[] = ['label' => $group['label'], 'fields' => $fields];
         }
-        echo implode(' | ', $out);
+        return $groups;
+    }
+
+    /** Replace the complete overrides document and refresh this instance on success. */
+    public function save($submitted): bool
+    {
+        $overrides = [];
+        foreach ($this->fieldsByKey as $key => $field) {
+            $submittedValue = $this->submittedValue($submitted, $key);
+            if ($submittedValue === null) {
+                continue;
+            }
+            if (mb_strlen($submittedValue, 'UTF-8') > self::FIELD_LIMIT) {
+                $submittedValue = mb_substr($submittedValue, 0, self::FIELD_LIMIT, 'UTF-8');
+            }
+            $value = trim($submittedValue);
+            if ($value !== '' && $value !== $field['default']) {
+                $overrides[$key] = $value;
+            }
+        }
+        $json = json_encode($overrides, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false || !atomic_write($this->path, $json)) {
+            return false;
+        }
+        $this->overrides = $overrides;
+        return true;
+    }
+
+    public function text(string $key): string
+    {
+        return htmlspecialchars($this->value($key), ENT_QUOTES, 'UTF-8');
+    }
+
+    public function lines(string $key): string
+    {
+        return nl2br($this->text($key), false);
+    }
+
+    public function bio(string $key): string
+    {
+        $parts = explode(' | ', $this->text($key));
+        foreach ($parts as $index => $part) {
+            if ($index < 2) {
+                $parts[$index] = "<b>$part</b>";
+            }
+        }
+        return implode(' | ', $parts);
+    }
+
+    private function value(string $key): string
+    {
+        if (!isset($this->fieldsByKey[$key])) {
+            return '';
+        }
+        $saved = $this->overrides[$key] ?? null;
+        return is_string($saved) && $saved !== '' ? $saved : $this->fieldsByKey[$key]['default'];
+    }
+
+    private function submittedValue($submitted, string $key): ?string
+    {
+        $value = is_array($submitted) ? ($submitted[$key] ?? null) : null;
+        return is_string($value) ? str_replace("\r\n", "\n", $value) : null;
     }
 }

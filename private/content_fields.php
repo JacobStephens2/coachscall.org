@@ -3,12 +3,10 @@
  * Registry of editable page text for the /admin content editor.
  *
  * Each field has a human label, a type (text | multiline), and the default
- * (the original site copy). The public pages call cc('key') / cc_lines('key')
- * to print the saved value, falling back to the default below. To make more
- * text editable later, add a field here and reference its key from the page.
+ * (the original site copy). To make more text editable, add a field here and
+ * pass its key to the appropriate EditablePageText render method on the page.
  *
- * type "multiline": newlines entered by the editor become <br> on the page
- * (used for the stacked hero headlines).
+ * The type controls whether the editor renders a text input or a textarea.
  */
 return [
 
